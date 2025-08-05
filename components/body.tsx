@@ -9,7 +9,7 @@ import Image from "next/image";
 import Option1Select from "./option1Select";
 import Option2Select from "./option2Select";
 import ReceiverAddress from "./receiverAddress";
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import web3Service from "../services/web3Service"
 import priceService from "../services/priceService"
 import { CONTRACT_ADDRESSES } from "../services/contractService"
@@ -61,10 +61,18 @@ export default function Body() {
         return type1.includes(token2); // 检查token2是否在token1的同类型列表中
     };
     // 获取代币余额 - 只获取Token1的余额
-    const fetchTokenBalance = async (tokenInfo: { symbol: string; network: string; address: string }, isToken1: boolean = true) => {
-        if (!walletAddress) return;
+    const fetchTokenBalance = async (tokenInfo: { symbol: string; network: string; address: string }, isToken1: boolean = true, customWalletAddress?: string) => {
+        const addressToUse = customWalletAddress || walletAddress;
+        if (!addressToUse) return;
         
-        console.log(`[FETCH BALANCE] 开始获取余额 - 代币: ${tokenInfo.symbol}, 网络: ${tokenInfo.network}, 地址: ${tokenInfo.address}`);
+        console.log('=== [FETCH BALANCE] 开始获取余额 ===');
+        console.log('[FETCH BALANCE] 钱包地址:', addressToUse);
+        console.log('[FETCH BALANCE] 代币详细信息:');
+        console.log('  - 代币符号:', tokenInfo.symbol);
+        console.log('  - 网络:', tokenInfo.network);
+        console.log('  - 代币地址:', tokenInfo.address || '(原生代币，无地址)');
+        console.log('  - 是否为Token1:', isToken1);
+        console.log('=====================================');
         
         setIsLoadingBalance(true);
         try {
@@ -78,8 +86,8 @@ export default function Body() {
                 console.log(`[FETCH BALANCE] 当前网络: ${currentNetwork}`);
                 
                 // 获取余额
-                console.log(`[FETCH BALANCE] 查询代币余额 - 代币地址: ${tokenInfo.address}, 钱包地址: ${walletAddress}`);
-                const balance = await web3Service.getTokenBalance(tokenInfo.address, walletAddress);
+                console.log(`[FETCH BALANCE] 查询代币余额 - 代币地址: ${tokenInfo.address}, 钱包地址: ${addressToUse}`);
+                const balance = await web3Service.getTokenBalance(tokenInfo.address, addressToUse);
                 console.log(`[FETCH BALANCE] 获取到余额: ${balance} ${tokenInfo.symbol}`);
                 
                 setToken1Balance(balance);
@@ -94,6 +102,42 @@ export default function Body() {
             setIsLoadingBalance(false);
         }
     };
+
+    // 处理余额刷新事件 - 使用useCallback确保能访问到最新的状态
+    const handleRefreshBalance = useCallback((event: any) => {
+        console.log('收到余额刷新事件，开始更新余额');
+        const savedAddress = localStorage.getItem("walletAddress");
+        console.log('当前钱包地址:', savedAddress);
+        
+        // 详细输出option1和option2的代币信息
+        console.log('=== 代币信息详情 ===');
+        console.log('Option1 (selectedToken1):');
+        console.log('  - 代币符号:', selectedToken1.symbol);
+        console.log('  - 网络:', selectedToken1.network);
+        console.log('  - 地址:', selectedToken1.address || '(原生代币，无地址)');
+        console.log('Option2 (selectedToken2):');
+        console.log('  - 代币符号:', selectedToken2.symbol);
+        console.log('  - 网络:', selectedToken2.network);
+        console.log('  - 地址:', selectedToken2.address || '(原生代币，无地址)');
+        console.log('===================');
+        
+        if (savedAddress) {
+            // 更新钱包地址状态
+            setWalletAddress(savedAddress);
+            
+            // 根据操作类型决定刷新哪个代币的余额
+            const { operationType, targetToken, sourceToken } = event.detail || {};
+            console.log('操作类型:', operationType, '目标代币:', targetToken, '源代币:', sourceToken);
+            
+            // 简化逻辑：无论什么操作，都刷新当前界面上的selectedToken1
+            // 因为selectedToken1是用户当前看到的"From"代币，也是显示余额的代币
+            if (selectedToken1) {
+                console.log('将要刷新的代币:', selectedToken1);
+                // 使用savedAddress直接获取余额，避免状态更新延迟
+                fetchTokenBalance(selectedToken1, true, savedAddress);
+            }
+        }
+    }, [selectedToken1, selectedToken2, fetchTokenBalance]);
 
     // 监听钱包地址变化
     useEffect(() => {
@@ -208,14 +252,6 @@ export default function Body() {
                 }
             };
             
-            // 处理余额刷新事件
-            const handleRefreshBalance = () => {
-                console.log('收到余额刷新事件，开始更新余额');
-                const savedAddress = localStorage.getItem("walletAddress");
-                if (savedAddress && walletAddress && savedAddress === walletAddress && selectedToken1) {
-                    fetchTokenBalance(selectedToken1, true);
-                }
-            };
             
             // 添加事件监听器
             if (window.ethereum) {
@@ -233,7 +269,7 @@ export default function Body() {
                 document.removeEventListener('refreshBalance', handleRefreshBalance);
             };
         }
-    }, []);
+    }, [handleRefreshBalance]);
 
     // 当钱包地址或选择的代币变化时，获取余额并切换网络
     useEffect(() => {
@@ -452,8 +488,15 @@ export default function Body() {
                         className="mx-auto mt-8 mb-3 w-7 h-7 cursor-pointer hover:opacity-80 transition-opacity" 
                         onClick={() => {
                             console.log('[EXCHANGE] 开始交换代币');
-                            console.log('[EXCHANGE] 交换前 - selectedToken1:', selectedToken1);
-                            console.log('[EXCHANGE] 交换前 - selectedToken2:', selectedToken2);
+                            console.log('[EXCHANGE] 交换前详细信息:');
+                            console.log('[EXCHANGE] selectedToken1 (From):');
+                            console.log('  - 代币符号:', selectedToken1.symbol);
+                            console.log('  - 网络:', selectedToken1.network);
+                            console.log('  - 地址:', selectedToken1.address || '(原生代币，无地址)');
+                            console.log('[EXCHANGE] selectedToken2 (To):');
+                            console.log('  - 代币符号:', selectedToken2.symbol);
+                            console.log('  - 网络:', selectedToken2.network);
+                            console.log('  - 地址:', selectedToken2.address || '(原生代币，无地址)');
                             
                             // 交换selectedToken1和selectedToken2的值
                             const temp = {...selectedToken1};
@@ -494,8 +537,15 @@ export default function Body() {
                                 setSelectedToken2(newSelectedToken2);
                             }
                             
-                            console.log('[EXCHANGE] 交换后 - 新的selectedToken1:', newSelectedToken1);
-                            console.log('[EXCHANGE] 交换后 - 新的selectedToken2:', newSelectedToken2);
+                            console.log('[EXCHANGE] 交换后详细信息:');
+                            console.log('[EXCHANGE] 新的selectedToken1 (From):');
+                            console.log('  - 代币符号:', newSelectedToken1.symbol);
+                            console.log('  - 网络:', newSelectedToken1.network);
+                            console.log('  - 地址:', newSelectedToken1.address || '(原生代币，无地址)');
+                            console.log('[EXCHANGE] 新的selectedToken2 (To):');
+                            console.log('  - 代币符号:', newSelectedToken2.symbol);
+                            console.log('  - 网络:', newSelectedToken2.network);
+                            console.log('  - 地址:', newSelectedToken2.address || '(原生代币，无地址)');
                             
                             // 交换余额显示
                             const tempBalance = token1Balance;

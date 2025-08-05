@@ -234,20 +234,13 @@ function reducer(state: State, action: Action): State {
                     });
                     dispatchAction({ type: 'SET_CURRENT_BURN_STEP', payload: 'mintCompleted' });
                     
-                    // 销毁成功后检查余额
-                    console.log('UNLOCK_SUCCESS: 触发余额检查');
-                    setTimeout(() => {
-                        if (typeof window !== 'undefined') {
-                            const event = new CustomEvent('refreshBalance');
-                            document.dispatchEvent(event);
-                        }
-                    }, 1000);
-                    
-                    // 锁币成功后检查余额
+                    // 铸币成功后触发余额刷新
                     console.log('MINT_SUCCESS: 触发余额检查');
                     setTimeout(() => {
                         if (typeof window !== 'undefined') {
-                            const event = new CustomEvent('refreshBalance');
+                            const event = new CustomEvent('refreshBalance', {
+                                detail: { operationType: 'mint', targetToken: state.targetToken }
+                            });
                             document.dispatchEvent(event);
                         }
                     }, 1000);
@@ -328,6 +321,17 @@ function reducer(state: State, action: Action): State {
                         } 
                     });
                     dispatchAction({ type: 'SET_CURRENT_BURN_STEP', payload: 'mintCompleted' });
+                    
+                    // 解锁成功后触发余额刷新
+                    console.log('UNLOCK_SUCCESS: 触发余额检查');
+                    setTimeout(() => {
+                        if (typeof window !== 'undefined') {
+                            const event = new CustomEvent('refreshBalance', {
+                                detail: { operationType: 'unlock', targetToken: state.targetToken }
+                            });
+                            document.dispatchEvent(event);
+                        }
+                    }, 1000);
                 } else {
                     // Handle other types of messages
                     newMintStatus = {
@@ -1342,7 +1346,9 @@ export default function Submit({ onConnectWallet, receiverAddress, amount, selec
                 
                 // Trigger balance refresh after burn success
                 setTimeout(() => {
-                    window.dispatchEvent(new CustomEvent('refreshBalance'));
+                    window.dispatchEvent(new CustomEvent('refreshBalance', {
+                        detail: { operationType: 'burn', sourceToken: sourceToken }
+                    }));
                 }, 1000);
             }
             
